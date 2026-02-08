@@ -1,0 +1,140 @@
+-- Create districts table
+CREATE TABLE districts (
+    district_id SERIAL PRIMARY KEY,
+    district_name VARCHAR(100) NOT NULL,
+    population INT NOT NULL
+);
+
+-- Create zones table
+CREATE TABLE zones (
+    zone_id SERIAL PRIMARY KEY,
+    district_id INT REFERENCES districts(district_id),
+    zone_name VARCHAR(100) NOT NULL
+);
+
+-- Create collections table
+CREATE TABLE collections (
+    collection_id SERIAL PRIMARY KEY,
+    zone_id INT REFERENCES zones(zone_id),
+    collection_date DATE NOT NULL,
+    waste_kg DECIMAL(10,2) NOT NULL,
+    contractor VARCHAR(100)
+);
+INSERT INTO districts (district_name, population) VALUES
+('Gasabo', 900000),
+('Kicukiro', 700000),
+('Nyarugenge', 600000),
+('Bugesera', 450000);
+
+INSERT INTO zones (district_id, zone_name) VALUES
+(1, 'Kimironko'),
+(1, 'Kacyiru'),
+(2, 'Gikondo'),
+(2, 'Kanombe'),
+(3, 'Nyamirambo'),
+(4, 'Ruhuha');
+
+INSERT INTO collections (zone_id, collection_date, waste_kg, contractor) VALUES
+(1, '2025-01-05', 1200, 'CleanCity Ltd'),
+(1, '2025-02-05', 1350, 'CleanCity Ltd'),
+(1, '2025-03-05', 1500, 'CleanCity Ltd'),
+(2, '2025-01-10', 900, 'EcoWaste'),
+(2, '2025-02-10', 950, 'EcoWaste'),
+(3, '2025-01-08', 1100, 'GreenMove'),
+(3, '2025-02-08', 1250, 'GreenMove'),
+(4, '2025-03-12', 800, 'EcoWaste'),
+(5, '2025-01-15', 1600, 'CleanCity Ltd'),
+(5, '2025-02-15', 1700, 'CleanCity Ltd');
+
+-- INNER JOIN
+SELECT d.district_name, z.zone_name, c.collection_date, c.waste_kg
+FROM collections c
+INNER JOIN zones z ON c.zone_id = z.zone_id
+INNER JOIN districts d ON z.district_id = d.district_id;
+
+-- LEFT JOIN
+SELECT d.district_name
+FROM districts d
+LEFT JOIN zones z ON d.district_id = z.district_id
+LEFT JOIN collections c ON z.zone_id = c.zone_id
+WHERE c.collection_id IS NULL;
+
+-- RIGHT JOIN
+SELECT z.zone_name
+FROM collections c
+RIGHT JOIN zones z ON c.zone_id = z.zone_id
+WHERE c.collection_id IS NULL;
+
+-- FULL OUTER JOIN
+SELECT d.district_name, z.zone_name
+FROM districts d
+FULL OUTER JOIN zones z
+ON d.district_id = z.district_id;
+
+-- SELF JOIN
+SELECT a.zone_name AS zone_1, b.zone_name AS zone_2, d.district_name
+FROM zones a
+JOIN zones b ON a.district_id = b.district_id
+JOIN districts d ON a.district_id = d.district_id
+WHERE a.zone_id <> b.zone_id;
+
+
+-- RANK
+SELECT zone_name, month, total_waste,
+RANK() OVER (PARTITION BY month ORDER BY total_waste DESC) AS rank_in_month
+FROM (
+    SELECT z.zone_name,
+    DATE_TRUNC('month', c.collection_date) AS month,
+    SUM(c.waste_kg) AS total_waste
+    FROM collections c
+    JOIN zones z ON c.zone_id = z.zone_id
+    GROUP BY z.zone_name, month
+) t;
+
+-- RUNNING TOTAL
+SELECT district_name, collection_date,
+SUM(waste_kg) OVER (
+PARTITION BY district_name
+ORDER BY collection_date
+ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW
+) AS running_total
+FROM (
+    SELECT d.district_name, c.collection_date, c.waste_kg
+    FROM collections c
+    JOIN zones z ON c.zone_id = z.zone_id
+    JOIN districts d ON z.district_id = d.district_id
+) x;
+
+-- LAG
+SELECT month, total_waste,
+total_waste - LAG(total_waste) OVER (ORDER BY month) AS monthly_change
+FROM (
+    SELECT DATE_TRUNC('month', collection_date) AS month,
+    SUM(waste_kg) AS total_waste
+    FROM collections
+    GROUP BY month
+) m;
+
+-- NTILE
+SELECT district_name, total_waste,
+NTILE(4) OVER (ORDER BY total_waste DESC) AS waste_quartile
+FROM (
+    SELECT d.district_name, SUM(c.waste_kg) AS total_waste
+    FROM collections c
+    JOIN zones z ON c.zone_id = z.zone_id
+    JOIN districts d ON z.district_id = d.district_id
+    GROUP BY d.district_name
+) t;
+
+-- MOVING AVERAGE
+SELECT month, total_waste,
+AVG(total_waste) OVER (
+ORDER BY month
+ROWS BETWEEN 2 PRECEDING AND CURRENT ROW
+) AS three_month_avg
+FROM (
+    SELECT DATE_TRUNC('month', collection_date) AS month,
+    SUM(waste_kg) AS total_waste
+    FROM collections
+    GROUP BY month
+) m;
